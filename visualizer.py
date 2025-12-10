@@ -4,15 +4,10 @@ import matplotlib.pyplot as plt
 
 def get_values_from_data(csv_path, header="average_pupil_diameter_mm"):
     """
-    Load `header` data column from the CSV.
-
-    Returns:
-        np.ndarray of pupil sizes (floats)
+    Returns `header` data column from the CSV.
     """
 	
     df = pd.read_csv(csv_path)
-
-    # Use the "average_pupil_diameter_mm" column
     return df[header].values
 
 def fit_increments(inc):
@@ -23,12 +18,9 @@ def fit_increments(inc):
 		return np.poly1d(coeffs)
 
 def clean_pupil_sizes(pupil_sizes):
+    """Interpolates missing data"""
     arr = np.array(pupil_sizes, dtype=float)
-
-    # Replace out-of-range values with NaN
     arr[(arr < 0.8) | (arr > 10)] = np.nan
-
-    # Interpolate over NaNs
     valid = ~np.isnan(arr)
     x = np.arange(len(arr))
     cleaned = np.interp(x, x[valid], arr[valid])
@@ -36,17 +28,22 @@ def clean_pupil_sizes(pupil_sizes):
     return cleaned
 
 def calculate(pupil_sizes, brightnesses, predict_function):
+    """
+    Calculate the "average power".
+
+    Does `pupil_sizes` - `predicted_pupil_sizes`
+
+    Args:
+        pupil_sizes: The actual recorded pupil sizes
+        brightnesses: The recorded brightness of the screen (previously called "luminance")
+        predict_function: The "calibrated" pupil_size estimator
+
+    """
     cleaned_pupil_sizes = clean_pupil_sizes(pupil_sizes)
-    input(cleaned_pupil_sizes)
+    input(f"{cleaned_pupil_sizes} (Hold [enter])")
     input(brightnesses)
     predicted_pupil_sizes = np.array( [predict_function(l) for l in brightnesses] )
     input(predicted_pupil_sizes)
-    
-    """
-    difference = np.zeros((len(cleaned_pupil_sizes)))
-    for i in range(0, len(cleaned_pupil_sizes)):
-        difference[i] = cleaned_pupil_sizes[i] - predicted_pupil_sizes[i]
-    """
     difference = cleaned_pupil_sizes - predicted_pupil_sizes
     input(difference)
     N = 2
@@ -62,35 +59,49 @@ def calculate(pupil_sizes, brightnesses, predict_function):
     return difference, moving_avg_power
 
 
-increments = get_values_from_data("Calibration_log_11251606_001.csv")[:17]
-print(f"{increments}")
-predict_function = fit_increments(increments)
-print(f"Predicted: {predict_function(0.5338367)}, Actual: 2.902098")
-pupil_sizes = get_values_from_data("Calibration_log_11251606_001.csv")[18:]
-print(f"{pupil_sizes}")
 
-brightnesses = get_values_from_data("Calibration_log_11251606_001.csv", "screen_brightness")[18:]
-predicted_pupil_sizes = np.array( [predict_function(l) for l in brightnesses] )
-difference, arousal = calculate(pupil_sizes, brightnesses, predict_function)
 
-print("len(increments):", len(increments))
-print("len(predicted_pupil_sizes):", len(predicted_pupil_sizes))
-print("len(pupil_sizes):", len(pupil_sizes))
-print("len(brightnesses):", len(brightnesses))
-print("len(arousal):", len(arousal))
+def main(csv_path="data/Calibration_log_11251606_001.csv"):
+    # Splits are within data (assumed)
 
-# --- Plot ---
-plt.figure()
+    # --- Calibrate ---
+    increments = get_values_from_data(csv_path)[:17]
+    predict_function = fit_increments(increments)
+    brightnesses = get_values_from_data(csv_path, "screen_brightness")[:17]
 
-plt.plot(brightnesses, label="Brightness", linewidth=2)
-plt.plot(clean_pupil_sizes(pupil_sizes), label="Actual Pupil Size", linewidth=2)
-plt.plot(difference, label="Difference", linewidth=2)
-plt.plot(np.array( [predict_function(l) for l in brightnesses] ), label="Predicted Pupil Size", linewidth=2)
-plt.plot(arousal, label="Arousal", linewidth=2)
+    # --- Plot calibration ---
+    plt.figure()
+    plt.plot(increments, label="Pupil Size (Increments)", linewidth=2)
+    plt.plot(brightnesses, label="Brightness", linewidth=2)
+    plt.plot(np.array( [predict_function(l) for l in brightnesses] ), label="Prediction function", linewidth=2)
+    plt.title("Calibration")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
 
-plt.xlabel("Sample Index")
-plt.ylabel("Value")
-plt.title("Brightness vs Pupil Size vs Predicted Pupil Size vs Arousal")
-plt.legend()
-plt.tight_layout()
-plt.show()
+    # --- Calculate ---
+    pupil_sizes = get_values_from_data(csv_path)[18:]
+    brightnesses = get_values_from_data(csv_path, "screen_brightness")[18:]
+    predicted_pupil_sizes = np.array( [predict_function(l) for l in brightnesses] )
+    difference, arousal = calculate(pupil_sizes, brightnesses, predict_function)
+
+    print("len(increments):", len(increments))
+    print("len(predicted_pupil_sizes):", len(predicted_pupil_sizes))
+    print("len(pupil_sizes):", len(pupil_sizes))
+    print("len(brightnesses):", len(brightnesses))
+    print("len(arousal):", len(arousal))
+
+    # --- Plot calculation ---
+    plt.figure()
+    plt.plot(brightnesses, label="Brightness", linewidth=2)
+    plt.plot(clean_pupil_sizes(pupil_sizes), label="Actual Pupil Size", linewidth=2)
+    plt.plot(difference, label="Difference", linewidth=2)
+    plt.plot(np.array( [predict_function(l) for l in brightnesses] ), label="Predicted Pupil Size", linewidth=2)
+    plt.plot(arousal, label="Arousal", linewidth=2)
+    plt.title("Brightness vs Pupil Size vs Predicted Pupil Size vs Arousal")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    main()
